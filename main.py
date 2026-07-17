@@ -245,8 +245,8 @@ class GatewaysDeveloper:
             "gateway-response": message,
             "api-response": "Approved! ✅" if status else "Declined ❌",
             "gateway-type": "Zuora + Braintree",
-            "gateway-mode": "auth",
-            "gateway-amount": 0.00,
+            "gateway-mode": "Pre Auth",
+            "gateway-amount": 0.01,
             "gateway-currency": "USD"
         }
 
