@@ -776,3 +776,6 @@ def home():
         'message': 'API is running',
         'usage': '/check?cc=number|month|year|cvv'
     }), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
