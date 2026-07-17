@@ -19,7 +19,7 @@ _fake = Faker("en_US")
 GatewaysErrorStatus = False
 
 class GatewaysDeveloper:
-    _MaxRetrys = 3
+    _MaxRetrys = 5
 
     def __init__(self):
         self._MailTMCredentials = {}
@@ -188,7 +188,7 @@ class GatewaysDeveloper:
         
         headers = self.get_generator_api_headers()
         data = {'usr': self.email_username, 'dmn': self.email_domain}
-        response = self.session.post('https://generator.email/check_mail.php', headers=headers, data=data)
+        self.session.post('https://generator.email/check_mail.php', headers=headers, data=data)
         
         return self.email
 
@@ -253,6 +253,7 @@ class GatewaysDeveloper:
 
     def _Execute(self, _card, _mm, _yy, _cvv):
         for attempt in range(self._MaxRetrys):
+            print(f"\n=== Starting Monster Automation (Attempt {attempt+1}/{self._MaxRetrys}) ===")
             address, city, state, statecode, zipcode, phone, username, email, password, name1, name2 = self._GenerateRandomData()
             web = self._CreateSessionWeb(_ServiceWeb="Requests", _ProxyWeb=None)
             
@@ -264,10 +265,11 @@ class GatewaysDeveloper:
                 )
                 AuthorizeUrl = req.headers.get("location", req.headers.get("Location", ""))
                 if not AuthorizeUrl:
-                    SiteError = "Failed Getting Authorize URL"
+                    print("✗ Failed Getting Authorize URL")
                     continue
+                print("✓ Got Authorize URL")
             except Exception as u:
-                SiteError = f"Failed Getting Authorize URL | {u}"
+                print(f"✗ Failed Getting Authorize URL | {u}")
                 continue
 
             try:
@@ -275,7 +277,7 @@ class GatewaysDeveloper:
                 UlpUrl = req.url
                 B64Match = re.search(r'window\.atob\(["\']([A-Za-z0-9+/=]+)["\']\)', req.text)
                 if not B64Match:
-                    SiteError = "Failed to find Auth0 config"
+                    print("✗ Failed to find Auth0 config")
                     continue
                 Config = json.loads(b64decode(B64Match.group(1) + "==").decode("utf-8", "replace"))
                 ClientId = Config["clientID"]
@@ -284,13 +286,15 @@ class GatewaysDeveloper:
                 Csrf1 = Config["extraParams"]["_csrf"]
                 Auth0ClientH = b64encode(b'{"name":"auth0.js","version":"9.15.0"}').decode()
                 if not ClientId or not AuthState1 or not Nonce1 or not Csrf1:
-                    SiteError = "Failed Getting Auth0 Config values"
+                    print("✗ Failed Getting Auth0 Config values")
                     continue
+                print("✓ Got Auth0 config")
             except Exception as u:
-                SiteError = f"Failed Getting Auth0 Config | {u}"
+                print(f"✗ Failed Getting Auth0 Config | {u}")
                 continue
 
             TempMail = self._CreateTempEmail()
+            print(f"✓ Created email: {TempMail}")
             
             try:
                 headers = {
@@ -319,29 +323,32 @@ class GatewaysDeveloper:
                 }
                 req = web.post("https://hiring-identity.monster.com/dbconnections/signup", headers=headers, json=json_data)
                 if "_id" not in req.text:
-                    SiteError = f"Failed Signup: {req.text[:200]}"
+                    print(f"✗ Failed Signup: {req.text[:200]}")
                     continue
+                print("✓ Signup successful")
             except Exception as u:
-                SiteError = f"Failed Signup | {u}"
+                print(f"✗ Failed Signup | {u}")
                 continue
 
             try:
                 CodeOtp = self.fetch_verification_direct()
                 if not CodeOtp:
-                    SiteError = "Failed Getting Verification Ticket"
+                    print("✗ Failed Getting Verification Ticket")
                     continue
+                print("✓ Got verification ticket")
             except Exception as u:
-                SiteError = f"Error Getting Verification Ticket | {u}"
+                print(f"✗ Error Getting Verification Ticket | {u}")
                 continue
 
             try:
                 req = web.get(f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}", headers=self.get_monster_headers())
                 StateVerifyMail = self._Capture(req.text, 'name="state" value="', '"')
                 if not StateVerifyMail:
-                    SiteError = "Failed Getting Verify Page State"
+                    print("✗ Failed Getting Verify Page State")
                     continue
+                print("✓ Got verify state")
             except Exception as u:
-                SiteError = f"Failed Getting Verify Page | {u}"
+                print(f"✗ Failed Getting Verify Page | {u}")
                 continue
 
             try:
@@ -352,10 +359,11 @@ class GatewaysDeveloper:
                 data = {"state": StateVerifyMail}
                 req = web.post(f"https://hiring-identity.monster.com/u/email-verification?ticket={CodeOtp}", headers=headers, data=data)
                 if "verified" not in req.url.lower() and "success" not in req.url.lower():
-                    SiteError = "Failed Verify Email"
+                    print("✗ Failed Verify Email")
                     continue
+                print("✓ Email verified successfully")
             except Exception as u:
-                SiteError = f"Failed Verify Email | {u}"
+                print(f"✗ Failed Verify Email | {u}")
                 continue
 
             try:
@@ -366,10 +374,11 @@ class GatewaysDeveloper:
                 )
                 AuthorizeUrl2 = req.headers.get("location", req.headers.get("Location", ""))
                 if not AuthorizeUrl2:
-                    SiteError = "Failed Getting Fresh Authorize URL"
+                    print("✗ Failed Getting Fresh Authorize URL")
                     continue
+                print("✓ Got fresh Authorize URL")
             except Exception as u:
-                SiteError = f"Failed Getting Fresh Authorize URL | {u}"
+                print(f"✗ Failed Getting Fresh Authorize URL | {u}")
                 continue
 
             try:
@@ -381,10 +390,11 @@ class GatewaysDeveloper:
                 Nonce2 = Config2["extraParams"]["nonce"]
                 Csrf2 = Config2["extraParams"]["_csrf"]
                 if not AuthState2 or not Nonce2 or not Csrf2:
-                    SiteError = "Failed Getting Fresh Auth0 Config values"
+                    print("✗ Failed Getting Fresh Auth0 Config values")
                     continue
+                print("✓ Got fresh Auth0 config")
             except Exception as u:
-                SiteError = f"Failed Getting Fresh Auth0 Config | {u}"
+                print(f"✗ Failed Getting Fresh Auth0 Config | {u}")
                 continue
 
             try:
@@ -424,10 +434,11 @@ class GatewaysDeveloper:
                 WctxRaw = WctxMatch.group(1) if WctxMatch else None
                 
                 if not FormAction or not WaVal or not WresultRaw:
-                    SiteError = "Failed Auth0 Login"
+                    print("✗ Failed Auth0 Login")
                     continue
+                print("✓ Auth0 login successful")
             except Exception as u:
-                SiteError = f"Failed Auth0 Login | {u}"
+                print(f"✗ Failed Auth0 Login | {u}")
                 continue
 
             try:
@@ -465,10 +476,11 @@ class GatewaysDeveloper:
                     Bearer = self._Capture(req.text, '"access_token":"', '"')
                 
                 if not Bearer:
-                    SiteError = "Failed Getting Bearer"
+                    print("✗ Failed Getting Bearer")
                     continue
+                print("✓ Got Bearer token")
             except Exception as u:
-                SiteError = f"Failed Auth0 Callback | {u}"
+                print(f"✗ Failed Auth0 Callback | {u}")
                 continue
 
             try:
@@ -510,10 +522,11 @@ class GatewaysDeveloper:
                 req = web.post("https://appsapi.monster.io/employer-bff/v1/graphql?apiKey=4u8nirp5l6ugasm1im1itrg0er", headers=headers, json=json_data)
                 AccountId = self._Capture(req.text, '"accountId":"', '"')
                 if not AccountId:
-                    SiteError = f"Failed Creating Account: {req.text[:200]}"
+                    print(f"✗ Failed to create account: {req.text[:200]}")
                     continue
+                print("✓ Account created")
             except Exception as u:
-                SiteError = f"Failed Creating Account | {u}"
+                print(f"✗ Failed Creating Account | {u}")
                 continue
 
             try:
@@ -525,10 +538,11 @@ class GatewaysDeveloper:
                 Bearer = self._Capture(req.text, '"accessToken":"', '"')
                 DeviceId = self._Capture(req.text, '"device_id":"', '"') or DeviceId
                 if not AccountId or not Bearer:
-                    SiteError = "Failed Getting Token Account Id"
+                    print("✗ Failed Getting Token Account Id")
                     continue
+                print("✓ Got payment page token")
             except Exception as u:
-                SiteError = f"Failed Getting Token Account Id | {u}"
+                print(f"✗ Failed Getting Token Account Id | {u}")
                 continue
 
             try:
@@ -564,10 +578,11 @@ class GatewaysDeveloper:
                 ZuoraFieldAccountId = self._Capture(req.text, 'billingAccountId":"', '"')
                 ZuoraSignature = self._Capture(req.text, 'signature":"', '"')
                 if not all([ZuoraId, ZuoraTenantId, ZuoraToken, ZuoraFieldAccountId, ZuoraSignature]):
-                    SiteError = "Failed Getting Tokens Zuora Iframe"
+                    print("✗ Failed Getting Tokens Zuora Iframe")
                     continue
+                print("✓ Got Zuora payment info")
             except Exception as u:
-                SiteError = f"Failed Getting Tokens Zuora Iframe | {u}"
+                print(f"✗ Failed Getting Tokens Zuora Iframe | {u}")
                 continue
 
             try:
@@ -607,16 +622,17 @@ class GatewaysDeveloper:
                 ZuoraFieldKey = self._Capture(req.text, 'name="field_key" value="', '"')
                 Zuoraxjd28s_6sk = self._Capture(req.text, 'name="xjd28s_6sk" id="xjd28s_6sk" value="', '"')
                 if not all([ZuoraId, ZuoraTenantId, ZuoraToken, ZuoraSignature, ZuoraFieldKey, Zuoraxjd28s_6sk]):
-                    SiteError = "Failed Getting Zuora Iframe Tokens"
+                    print("✗ Failed Getting Zuora Iframe Tokens")
                     continue
+                print("✓ Got Zuora iframe tokens")
             except Exception as u:
-                SiteError = f"Failed Getting Zuora Iframe Tokens | {u}"
+                print(f"✗ Failed Getting Zuora Iframe Tokens | {u}")
                 continue
 
             try:
                 EncryptCard = self._Encrypt(_Card=_card, _Mm=_mm, _Yy=_yy, _Cvv=_cvv, _FieldKey=ZuoraFieldKey)
                 if not EncryptCard:
-                    SiteError = "Failed to encrypt card"
+                    print("✗ Failed to encrypt card")
                     continue
                 
                 headers = {
@@ -721,15 +737,15 @@ class GatewaysDeveloper:
                     return Message, Status
                 Message = self._Capture(req.text, 'errorMessage":"', '"')
                 if not Message:
-                    SiteError = "Error Post Checkout"
+                    print("✗ Error Post Checkout")
                     break
                 Status = self._VerifyStatusResponse(Message)
                 return Message, Status
             except Exception as u:
-                SiteError = f"Error Post Checkout | {u}"
+                print(f"✗ Error Post Checkout | {u}")
                 break
 
-        return SiteError, GatewaysErrorStatus
+        return "Max retries exceeded", GatewaysErrorStatus
 
 @app.route('/check', methods=['GET', 'POST'])
 def check_card():
